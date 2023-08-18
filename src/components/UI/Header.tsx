@@ -29,7 +29,7 @@ const Header = () => {
                                 <a href="#">
                                     <div className="it-brand-text">
                                         <div className="it-brand-title">
-                                            {user.name + " " + user.surname}
+                                            {user.nome + " " + user.cognome}
                                         </div>
                                     </div>
                                 </a>

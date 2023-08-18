@@ -63,7 +63,7 @@ const Login = () => {
                 if (data !== null) {
                     localStorage.setItem(
                         "codeJustifies",
-                        data.mechanographicCode
+                        data.codiceMeccanografico
                     );
                     navigate("/rto");
                 } else {

@@ -1,29 +1,32 @@
 import { useEffect, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../../hooks/redux-hooks";
 import Header from "../UI/Header";
-import {
-    addJustificationToRTO,
-    fetchRTOs,
-    getRTO,
-} from "../../store/rtosActions";
+import { fetchRTOs, getRTO } from "../../store/rtosActions";
 import { fetchUsers, getUser } from "../../store/usersActions";
 import { Button, Modal, Toast } from "react-bootstrap";
 import { BsCheckCircle } from "react-icons/bs";
 import "./RTOHome.css";
 import { RTO, RTOJustification } from "../../types";
+import {
+    addJustificationToRTO,
+    fetchUserJustifications,
+} from "../../store/justificationsActions";
 
 const RTOHome = () => {
     const dispatch = useAppDispatch();
     const [currentDay, setCurrentDay] = useState<string>("");
     const rtos = useAppSelector((state) => state.rtos.rtos);
     const user = useAppSelector((state) => state.users.currentUser);
+    const justifications = useAppSelector(
+        (state) => state.justifications.justifications
+    );
     const [showModal, setShowModal] = useState(false); // State to control modal visibility
     const [showToast, setShowToast] = useState(false);
     const [selectedRTO, setSelectedRTO] = useState<RTO>({
-        date: "",
-        description: "",
-        users: [],
-        justifications: [],
+        dataRTO: "",
+        descrizione: "",
+        codiciCategoria: [],
+        categorieEstese: [],
     });
     const [selectedOption, setSelectedOption] = useState("");
     const [textAreaValue, setTextAreaValue] = useState(""); // State to store text area value
@@ -44,7 +47,7 @@ const RTOHome = () => {
 
     const isRTOInSeason = (rto: RTO) => {
         const seasonYears = getSeason();
-        const rtoDate = getDate(rto.date);
+        const rtoDate = getDate(rto.dataRTO);
         if (rtoDate.getMonth() >= 6 && rtoDate.getMonth() <= 11) {
             return rtoDate.getFullYear() === seasonYears[0];
         } else if (rtoDate.getMonth() >= 0 && rtoDate.getMonth() <= 5) {
@@ -52,17 +55,32 @@ const RTOHome = () => {
         }
     };
 
+    const isUserAllowedToRTO = (rto: RTO) => {
+        const categorieEstese = rto.categorieEstese.map((categoria) =>
+            categoria.replaceAll(" ", "")
+        );
+        if (
+            rto.codiciCategoria.includes(user.codiceCategoria) &&
+            categorieEstese.includes(user.categoriaEstesa)
+        ) {
+            return true;
+        }
+        return false;
+    };
+
     const getRTOsOfSeason = () => {
-        return rtos.filter((rto) => isRTOInSeason(rto));
+        return rtos.filter(
+            (rto) => isRTOInSeason(rto) && isUserAllowedToRTO(rto)
+        );
     };
 
     const handleCloseModal = () => {
         setShowModal(false);
         setSelectedRTO({
-            date: "",
-            description: "",
-            users: [],
-            justifications: [],
+            dataRTO: "",
+            descrizione: "",
+            codiciCategoria: [],
+            categorieEstese: [],
         });
         setTextAreaValue("");
     };
@@ -83,7 +101,7 @@ const RTOHome = () => {
         ) {
             dispatch(
                 addJustificationToRTO(
-                    selectedRTO.date,
+                    selectedRTO.dataRTO,
                     justification,
                     localStorage.getItem("tokenJustifies")!
                 )
@@ -102,7 +120,7 @@ const RTOHome = () => {
 
     const getDate = (dateString: string) => {
         const [datePart, timePart] = dateString.split("T");
-        const [day, month, year] = datePart.split("-");
+        const [year, month, day] = datePart.split("-");
         const [hour, minute, second] = timePart.split(":");
         const formattedDateString = `${month}-${day}-${year} ${hour}:${minute}:${second}`;
         return new Date(formattedDateString);
@@ -126,7 +144,7 @@ const RTOHome = () => {
         const seasonsRTOs = getRTOsOfSeason();
         if (currentDay.length > 0) {
             const currentRTOs = seasonsRTOs.filter((rto) => {
-                const rtoDate = getDate(rto.date);
+                const rtoDate = getDate(rto.dataRTO);
                 const today = getDate(currentDay);
                 if (checkDateAfter(today, rtoDate)) {
                     return true;
@@ -142,7 +160,7 @@ const RTOHome = () => {
         const seasonsRTOs = getRTOsOfSeason();
         if (currentDay.length > 0) {
             const currentRTOs = seasonsRTOs.filter((rto) => {
-                const rtoDate = getDate(rto.date);
+                const rtoDate = getDate(rto.dataRTO);
                 const today = getDate(currentDay);
                 if (checkDateBefore(today, rtoDate)) {
                     return true;
@@ -156,10 +174,11 @@ const RTOHome = () => {
 
     const isUserJustifiedToRTO = (currentRTO: RTO) => {
         let justified = false;
-        currentRTO.justifications.forEach((justification) => {
+        console.log(justifications);
+        justifications.forEach((justification) => {
             if (
-                justification.user.mechanographicCode ===
-                user.mechanographicCode
+                justification.dataRTO === currentRTO.dataRTO &&
+                justification.statoUtente === "ASSENTE GIUSTIFICATO"
             ) {
                 justified = true;
             }
@@ -170,17 +189,14 @@ const RTOHome = () => {
     const getRTOJustificationOfUser = (currentRTO: RTO) => {
         let motivation: string = "";
         let motivationDescription: string = "";
-        currentRTO.justifications.forEach((justification) => {
-            if (
-                justification.user.mechanographicCode ===
-                user.mechanographicCode
-            ) {
-                motivation = justification.motivation;
-                motivationDescription = justification.motivation_description;
+        justifications.forEach((justification) => {
+            if (justification.dataRTO === currentRTO.dataRTO) {
+                motivation = justification.motivo;
+                motivationDescription = justification.descrizioneGiustifica;
             }
         });
         return {
-            motivation: motivation.length > 0 ? motivation : "INGIUSTIFICATO",
+            motivation: motivation.length > 0 ? motivation : "NON GIUSTIFICATO",
             motivationDescription:
                 motivationDescription.length > 0
                     ? motivationDescription
@@ -195,17 +211,23 @@ const RTOHome = () => {
         ) {
             dispatch(fetchUsers());
             dispatch(getUser(localStorage.getItem("codeJustifies")!));
-            dispatch(fetchRTOs(localStorage.getItem("tokenJustifies")!));
+            dispatch(fetchRTOs());
+            dispatch(
+                fetchUserJustifications(
+                    localStorage.getItem("tokenJustifies")!,
+                    localStorage.getItem("codeJustifies")!
+                )
+            );
             const today = new Date();
             const month = (today.getMonth() + 1).toString();
             const hour = today.getHours().toString();
             const minute = today.getMinutes().toString();
             const day =
-                today.getDate().toString().padStart(2, "0") +
+                today.getFullYear() +
                 "-" +
                 month.padStart(2, "0") +
                 "-" +
-                today.getFullYear() +
+                today.getDate().toString().padStart(2, "0") +
                 "T" +
                 hour.padStart(2, "0") +
                 ":" +
@@ -245,28 +267,28 @@ const RTOHome = () => {
                                 getPreviousRTOs()!
                                     .sort((a, b) => {
                                         return (
-                                            getDate(a.date).getTime() -
-                                            getDate(b.date).getTime()
+                                            getDate(a.dataRTO).getTime() -
+                                            getDate(b.dataRTO).getTime()
                                         );
                                     })
                                     .map((rto) => (
-                                        <tr key={rto.date}>
+                                        <tr key={rto.dataRTO}>
                                             <td>
                                                 {getDate(
-                                                    rto.date
+                                                    rto.dataRTO
                                                 ).toLocaleDateString()}{" "}
                                                 ore{" "}
-                                                {getDate(rto.date)
+                                                {getDate(rto.dataRTO)
                                                     .getHours()
                                                     .toString()
                                                     .padStart(2, "0")}
                                                 :
-                                                {getDate(rto.date)
+                                                {getDate(rto.dataRTO)
                                                     .getMinutes()
                                                     .toString()
                                                     .padStart(2, "0")}
                                             </td>
-                                            <td>{rto.description}</td>
+                                            <td>{rto.descrizione}</td>
                                             <td>
                                                 <Button
                                                     disabled
@@ -304,27 +326,27 @@ const RTOHome = () => {
                                 getNextRTOs()!
                                     .sort(
                                         (a, b) =>
-                                            getDate(a.date).getTime() -
-                                            getDate(b.date).getTime()
+                                            getDate(a.dataRTO).getTime() -
+                                            getDate(b.dataRTO).getTime()
                                     )
                                     .map((rto) => (
-                                        <tr key={rto.date}>
+                                        <tr key={rto.dataRTO}>
                                             <td>
                                                 {getDate(
-                                                    rto.date
+                                                    rto.dataRTO
                                                 ).toLocaleDateString()}{" "}
                                                 ore{" "}
-                                                {getDate(rto.date)
+                                                {getDate(rto.dataRTO)
                                                     .getHours()
                                                     .toString()
                                                     .padStart(2, "0")}
                                                 :
-                                                {getDate(rto.date)
+                                                {getDate(rto.dataRTO)
                                                     .getMinutes()
                                                     .toString()
                                                     .padStart(2, "0")}
                                             </td>
-                                            <td>{rto.description}</td>
+                                            <td>{rto.descrizione}</td>
                                             <td>
                                                 <Button
                                                     variant={
@@ -370,19 +392,19 @@ const RTOHome = () => {
                         // centered
                     >
                         <Modal.Header closeButton>
-                            {selectedRTO.date.length > 0 && (
+                            {selectedRTO.dataRTO.length > 0 && (
                                 <Modal.Title>
                                     Giustifica RTO del{" "}
                                     {getDate(
-                                        selectedRTO.date
+                                        selectedRTO.dataRTO
                                     ).toLocaleDateString()}{" "}
                                     ore{" "}
-                                    {getDate(selectedRTO.date)
+                                    {getDate(selectedRTO.dataRTO)
                                         .getHours()
                                         .toString()
                                         .padStart(2, "0")}
                                     :
-                                    {getDate(selectedRTO.date)
+                                    {getDate(selectedRTO.dataRTO)
                                         .getMinutes()
                                         .toString()
                                         .padStart(2, "0")}
