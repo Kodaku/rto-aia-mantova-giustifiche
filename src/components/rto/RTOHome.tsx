@@ -174,11 +174,10 @@ const RTOHome = () => {
 
     const isUserJustifiedToRTO = (currentRTO: RTO) => {
         let justified = false;
-        console.log(justifications);
         justifications.forEach((justification) => {
             if (
                 justification.dataRTO === currentRTO.dataRTO &&
-                justification.statoUtente === "ASSENTE GIUSTIFICATO"
+                (justification.statoUtente === "ASSENTE GIUSTIFICATO" || justification.statoUtente === "PRESENTE")
             ) {
                 justified = true;
             }
@@ -189,10 +188,20 @@ const RTOHome = () => {
     const getRTOJustificationOfUser = (currentRTO: RTO) => {
         let motivation: string = "";
         let motivationDescription: string = "";
+        let isPresent = false;
         justifications.forEach((justification) => {
+            console.log(justification);
             if (justification.dataRTO === currentRTO.dataRTO) {
-                motivation = justification.motivo;
-                motivationDescription = justification.descrizioneGiustifica;
+                if (justification.statoUtente == "PRESENTE") {
+                    motivation = "Tutto regolare";
+                    motivationDescription = "PRESENTE";
+                    isPresent = true;
+                } else {
+                    if (!isPresent) {
+                        motivation = justification.motivo;
+                        motivationDescription = justification.descrizioneGiustifica;
+                    }
+                }
             }
         });
         return {
@@ -303,7 +312,9 @@ const RTOHome = () => {
                                                         handleActionClick(rto)
                                                     }
                                                 >
-                                                    Giustifica
+                                                    {getRTOJustificationOfUser(
+                                                        rto
+                                                    ).motivationDescription === "PRESENTE" ? "OK" : "Giustifica"}
                                                 </Button>
                                             </td>
                                             <td>
